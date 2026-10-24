@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -12,24 +12,117 @@ import {
   Platform,
   Image,
 } from 'react-native';
-import { Ionicons, MaterialIcons, Feather } from '@expo/vector-icons';
-import { createLoanApi } from '../lib/api.ts';
-import { LoanEntry } from '../types.ts';
+import { Ionicons } from '@expo/vector-icons';
+import { createLoanApi } from '../lib/api';
+import { LoanEntry } from '../types';
 
 interface CreateLoanModalProps {
   isOpen: boolean;
   onClose: () => void;
   onLoanCreated: (loan: LoanEntry) => void;
+  phone?: string;
 }
 
 const SAMPLE_RECEIPT_URL =
   'https://images.unsplash.com/photo-1554415707-9e4466b88738?auto=format&fit=crop&w=400&q=80';
 
+type CurrencyInfo = { locale: string; currency: string };
+
+const CURRENCIES: Record<string, CurrencyInfo> = {
+  '1': { locale: 'en-US', currency: 'USD' },
+  '44': { locale: 'en-GB', currency: 'GBP' },
+  '91': { locale: 'en-IN', currency: 'INR' },
+  '61': { locale: 'en-AU', currency: 'AUD' },
+  '64': { locale: 'en-NZ', currency: 'NZD' },
+  '65': { locale: 'en-SG', currency: 'SGD' },
+  '81': { locale: 'ja-JP', currency: 'JPY' },
+  '82': { locale: 'ko-KR', currency: 'KRW' },
+  '86': { locale: 'zh-CN', currency: 'CNY' },
+  '971': { locale: 'ar-AE', currency: 'AED' },
+  '966': { locale: 'ar-SA', currency: 'SAR' },
+  '27': { locale: 'en-ZA', currency: 'ZAR' },
+  '55': { locale: 'pt-BR', currency: 'BRL' },
+  '52': { locale: 'es-MX', currency: 'MXN' },
+  '41': { locale: 'de-CH', currency: 'CHF' },
+  '49': { locale: 'de-DE', currency: 'EUR' },
+  '33': { locale: 'fr-FR', currency: 'EUR' },
+  '39': { locale: 'it-IT', currency: 'EUR' },
+  '31': { locale: 'nl-NL', currency: 'EUR' },
+  '353': { locale: 'en-IE', currency: 'EUR' },
+  '46': { locale: 'sv-SE', currency: 'SEK' },
+  '47': { locale: 'nb-NO', currency: 'NOK' },
+  '45': { locale: 'da-DK', currency: 'DKK' },
+  '90': { locale: 'tr-TR', currency: 'TRY' },
+  '62': { locale: 'id-ID', currency: 'IDR' },
+  '60': { locale: 'ms-MY', currency: 'MYR' },
+  '63': { locale: 'en-PH', currency: 'PHP' },
+  '66': { locale: 'th-TH', currency: 'THB' },
+  '92': { locale: 'ur-PK', currency: 'PKR' },
+  '880': { locale: 'bn-BD', currency: 'BDT' },
+  '94': { locale: 'si-LK', currency: 'LKR' },
+  '20': { locale: 'ar-EG', currency: 'EGP' },
+  '234': { locale: 'en-NG', currency: 'NGN' },
+  '254': { locale: 'en-KE', currency: 'KES' },
+};
+
+// Currencies that have no minor unit (no decimals)
+const ZERO_DECIMAL = ['JPY', 'KRW', 'IDR'];
+
+// Quick-pick amounts that make sense for each currency
+const PRESETS: Record<string, number[]> = {
+  JPY: [500, 1000, 5000, 10000],
+  KRW: [5000, 10000, 50000, 100000],
+  IDR: [20000, 50000, 100000, 200000],
+  PKR: [500, 1000, 2000, 5000],
+  NGN: [1000, 2000, 5000, 10000],
+  BDT: [100, 500, 1000, 2000],
+  LKR: [500, 1000, 2000, 5000],
+  KES: [200, 500, 1000, 2000],
+  THB: [100, 200, 500, 1000],
+  PHP: [100, 200, 500, 1000],
+};
+
+const DEFAULT_PRESETS = [20, 50, 100, 200];
+
+const getCurrencyInfo = (phone?: string): CurrencyInfo => {
+  // Remove "+", spaces, dashes, etc. so only digits are left
+  const digits = (phone || '').replace(/\D/g, '');
+
+  // Match the longest calling code first (e.g. 971 before 97)
+  const callingCode = Object.keys(CURRENCIES)
+    .sort((a, b) => b.length - a.length)
+    .find((code) => digits.startsWith(code));
+
+  return CURRENCIES[callingCode || '91'];
+};
+
+const getCurrencySymbol = (info: CurrencyInfo) => {
+  try {
+    return (
+      new Intl.NumberFormat(info.locale, {
+        style: 'currency',
+        currency: info.currency,
+        maximumFractionDigits: 0,
+      })
+        .formatToParts(0)
+        .find((part) => part.type === 'currency')?.value || info.currency
+    );
+  } catch {
+    return info.currency;
+  }
+};
+
 export const CreateLoanModal: React.FC<CreateLoanModalProps> = ({
   isOpen,
   onClose,
   onLoanCreated,
+  phone,
 }) => {
+  const currencyInfo = useMemo(() => getCurrencyInfo(phone), [phone]);
+  const currencySymbol = useMemo(() => getCurrencySymbol(currencyInfo), [currencyInfo]);
+  const isZeroDecimal = ZERO_DECIMAL.includes(currencyInfo.currency);
+  const presets = PRESETS[currencyInfo.currency] ?? DEFAULT_PRESETS;
+
   const [friendName, setFriendName] = useState('');
   const [amount, setAmount] = useState('');
   const [dueDate, setDueDate] = useState(() => {
@@ -46,6 +139,17 @@ export const CreateLoanModal: React.FC<CreateLoanModalProps> = ({
     const d = new Date();
     d.setDate(d.getDate() + daysAhead);
     setDueDate(d.toISOString().split('T')[0]);
+  };
+
+  const handleAmountChange = (text: string) => {
+    if (isZeroDecimal) {
+      setAmount(text.replace(/[^0-9]/g, ''));
+    } else {
+      // digits and at most one decimal point
+      const cleaned = text.replace(/[^0-9.]/g, '');
+      const parts = cleaned.split('.');
+      setAmount(parts.length > 2 ? `${parts[0]}.${parts.slice(1).join('')}` : cleaned);
+    }
   };
 
   const handleSubmit = async () => {
@@ -155,28 +259,33 @@ export const CreateLoanModal: React.FC<CreateLoanModalProps> = ({
 
             {/* Amount */}
             <View style={styles.fieldGroup}>
-              <Text style={styles.fieldLabel}>LOAN AMOUNT ($) *</Text>
+              <Text style={styles.fieldLabel}>
+                LOAN AMOUNT ({currencySymbol}) *
+              </Text>
               <View style={styles.inputContainer}>
-                <Text style={styles.currencyPrefix}>$</Text>
+                <Text style={styles.currencyPrefix}>{currencySymbol}</Text>
                 <TextInput
                   style={[styles.textInput, styles.amountInput]}
-                  keyboardType="decimal-pad"
+                  keyboardType={isZeroDecimal ? 'number-pad' : 'decimal-pad'}
                   value={amount}
-                  onChangeText={setAmount}
-                  placeholder="0.00"
+                  onChangeText={handleAmountChange}
+                  placeholder={isZeroDecimal ? '0' : '0.00'}
                   placeholderTextColor="#94a3b8"
                 />
               </View>
 
               {/* Amount Quick Presets */}
               <View style={styles.pillRow}>
-                {[20, 50, 100, 200].map((val) => (
+                {presets.map((val) => (
                   <TouchableOpacity
                     key={val}
                     style={styles.presetPill}
                     onPress={() => setAmount(val.toString())}
                   >
-                    <Text style={styles.presetPillText}>${val}</Text>
+                    <Text style={styles.presetPillText}>
+                      {currencySymbol}
+                      {val.toLocaleString()}
+                    </Text>
                   </TouchableOpacity>
                 ))}
               </View>
@@ -201,7 +310,10 @@ export const CreateLoanModal: React.FC<CreateLoanModalProps> = ({
                 <TouchableOpacity style={styles.datePill} onPress={() => setQuickDays(3)}>
                   <Text style={styles.datePillText}>+3 Days</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={[styles.datePill, styles.activeDatePill]} onPress={() => setQuickDays(7)}>
+                <TouchableOpacity
+                  style={[styles.datePill, styles.activeDatePill]}
+                  onPress={() => setQuickDays(7)}
+                >
                   <Text style={styles.activeDatePillText}>+1 Week</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.datePill} onPress={() => setQuickDays(14)}>

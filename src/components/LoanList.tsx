@@ -8,7 +8,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { Ionicons, Feather } from '@expo/vector-icons';
-import { LoanEntry } from '../types.ts';
+import { LoanEntry } from '../types';
 
 interface LoanListProps {
   loans: LoanEntry[];
@@ -21,7 +21,73 @@ interface LoanListProps {
   onDeleteLoan: (loanId: number) => void;
   onViewReceipt: (loan: LoanEntry) => void;
   onNewLoanClick: () => void;
+  phone?: string;
 }
+
+type CurrencyInfo = { locale: string; currency: string };
+
+const CURRENCIES: Record<string, CurrencyInfo> = {
+  '1': { locale: 'en-US', currency: 'USD' },
+  '44': { locale: 'en-GB', currency: 'GBP' },
+  '91': { locale: 'en-IN', currency: 'INR' },
+  '61': { locale: 'en-AU', currency: 'AUD' },
+  '64': { locale: 'en-NZ', currency: 'NZD' },
+  '65': { locale: 'en-SG', currency: 'SGD' },
+  '81': { locale: 'ja-JP', currency: 'JPY' },
+  '82': { locale: 'ko-KR', currency: 'KRW' },
+  '86': { locale: 'zh-CN', currency: 'CNY' },
+  '971': { locale: 'ar-AE', currency: 'AED' },
+  '966': { locale: 'ar-SA', currency: 'SAR' },
+  '27': { locale: 'en-ZA', currency: 'ZAR' },
+  '55': { locale: 'pt-BR', currency: 'BRL' },
+  '52': { locale: 'es-MX', currency: 'MXN' },
+  '41': { locale: 'de-CH', currency: 'CHF' },
+  '49': { locale: 'de-DE', currency: 'EUR' },
+  '33': { locale: 'fr-FR', currency: 'EUR' },
+  '39': { locale: 'it-IT', currency: 'EUR' },
+  '31': { locale: 'nl-NL', currency: 'EUR' },
+  '353': { locale: 'en-IE', currency: 'EUR' },
+  '46': { locale: 'sv-SE', currency: 'SEK' },
+  '47': { locale: 'nb-NO', currency: 'NOK' },
+  '45': { locale: 'da-DK', currency: 'DKK' },
+  '90': { locale: 'tr-TR', currency: 'TRY' },
+  '62': { locale: 'id-ID', currency: 'IDR' },
+  '60': { locale: 'ms-MY', currency: 'MYR' },
+  '63': { locale: 'en-PH', currency: 'PHP' },
+  '66': { locale: 'th-TH', currency: 'THB' },
+  '92': { locale: 'ur-PK', currency: 'PKR' },
+  '880': { locale: 'bn-BD', currency: 'BDT' },
+  '94': { locale: 'si-LK', currency: 'LKR' },
+  '20': { locale: 'ar-EG', currency: 'EGP' },
+  '234': { locale: 'en-NG', currency: 'NGN' },
+  '254': { locale: 'en-KE', currency: 'KES' },
+};
+
+const getCurrencyInfo = (phone?: string): CurrencyInfo => {
+  // Phone numbers are stored as E.164 strings (for example, +919876543210).
+  // Strip everything except digits, then match the longest calling code first.
+  const digits = (phone || '').replace(/\D/g, '');
+
+  const callingCode = Object.keys(CURRENCIES)
+    .sort((a, b) => b.length - a.length)
+    .find((code) => digits.startsWith(code));
+
+  return CURRENCIES[callingCode || '91'];
+};
+
+const formatMoney = (amount: number, currencyInfo: CurrencyInfo) => {
+  const value = Number(amount) || 0;
+
+  try {
+    // No forced decimals: JPY/KRW/IDR show 0, INR/USD/etc. show 2
+    return new Intl.NumberFormat(currencyInfo.locale, {
+      style: 'currency',
+      currency: currencyInfo.currency,
+    }).format(value);
+  } catch {
+    return `${currencyInfo.currency} ${value.toFixed(2)}`;
+  }
+};
 
 export const LoanList: React.FC<LoanListProps> = ({
   loans,
@@ -34,7 +100,11 @@ export const LoanList: React.FC<LoanListProps> = ({
   onDeleteLoan,
   onViewReceipt,
   onNewLoanClick,
+  phone,
 }) => {
+  const currencyInfo = getCurrencyInfo(phone);
+  const money = (amount: number) => formatMoney(amount, currencyInfo);
+
   const getAvatarColor = (name: string) => {
     const colors = ['#4f46e5', '#7c3aed', '#059669', '#d97706', '#0284c7'];
     let hash = 0;
@@ -216,7 +286,7 @@ export const LoanList: React.FC<LoanListProps> = ({
                         isOverdue && styles.amountOverdue,
                       ]}
                     >
-                      ${Number(loan.amount).toFixed(2)}
+                      {money(Number(loan.amount))}
                     </Text>
 
                     <View style={styles.actionsRow}>

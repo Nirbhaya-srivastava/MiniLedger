@@ -1,8 +1,0 @@
-{
-  "name": "MiniLedger - Friend Loan & Repayment Tracker",
-  "description": "Mobile app for tracking money lent to friends, repayment status, overdue alerts, receipt photos, and lending summary metrics with Node.js and PostgreSQL.",
-  "requestFramePermissions": [],
-  "majorCapabilities": [
-    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
-  ]
-}
